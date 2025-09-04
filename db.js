@@ -38,7 +38,7 @@ const Transaction = sequelize.define(
 Wallet.hasMany(Transaction, { foreignKey: "wallet_id" });
 Transaction.belongsTo(Wallet, { foreignKey: "wallet_id" });
 
-moddule.exports = {
+module.exports = {
   sequelize,
   Wallet,
   Transaction,
