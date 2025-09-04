@@ -169,12 +169,10 @@ async function syncWallet(walletId) {
       await fetchAndSaveErc20Transactions(wallet);
       break;
     case "TRC20":
-      console.log("Синхронизация для TRC20 еще не реализована");
-      // await fetchAndSaveTrc20Transactions(wallet);
+      await fetchAndSaveTrc20Transactions(wallet);
       break;
     case "SOL":
-      console.log("Синхронизация для SOL еще не реализована");
-      // await fetchAndSaveSolTransactions(wallet);
+      await fetchAndSaveSolTransactions(wallet);
       break;
   }
   console.log(`Синхронизация для кошелька ${wallet.label} завершена.`);
