@@ -129,7 +129,7 @@ async function getSolTokenBalance(walletAddress, tokenSymbol) {
   return Number(info.amount) / (10 ** mintInfo.decimals);
 }
 
-async function fetchAndSaveSolTokenIncomingTransactions(wallet, tokenSymbol) {
+async function fetchAndSaveSolTransactions(wallet, tokenSymbol) {
   const tokenMint = TOKEN_CONTRACTS.SOL[tokenSymbol];
   if (!tokenMint) throw new Error("Токен не поддерживается");
 
