@@ -1,10 +1,42 @@
 const express = require("express");
 require("dotenv").config();
+const { Client } = require("pg");
 const { sequelize, Wallet, Transaction, Op } = require("./db");
 const { syncWallet, getErc20TokenBalance } = require("./service");
 
 const app = express();
 app.use(express.json());
+
+const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+
+async function setupDatabase() {
+  const client = new Client({
+    host: DB_HOST,
+    port: DB_PORT,
+    user: DB_USER,
+    password: DB_PASSWORD,
+    database: "postgres",
+  });
+
+  try {
+    await client.connect();
+    const res = await client.query(
+      `SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'`
+    );
+    if (res.rowCount === 0) {
+      console.log(`База данных "${DB_NAME}" не найдена. Создание...`);
+      await client.query(`CREATE DATABASE "${DB_NAME}"`);
+      console.log(`База данных "${DB_NAME}" успешно создана.`);
+    } else {
+      console.log(`База данных "${DB_NAME}" уже существует.`);
+    }
+  } catch (error) {
+    console.error("Ошибка при настройке базы данных:", error);
+    process.exit(1);
+  } finally {
+    await client.end();
+  }
+}
 
 app.post("/api/wallets", async (req, res) => {
   try {
@@ -86,14 +118,24 @@ app.post("api/report", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log(`Сервер запущен на порту ${PORT}`);
+
+async function startServer() {
   try {
-    await sequelize.autenticate();
-    console.log("Соединение с БД установлено");
+    await setupDatabase();
+
+    await sequelize.authenticate();
+    console.log("Соединение Sequelize с БД установлено.");
+
     await sequelize.sync({ alter: true });
     console.log("Все модели были успешно синхронизированы.");
+
+    app.listen(PORT, () => {
+      console.log(`Сервер запущен и готов к работе на порту ${PORT}`);
+    });
   } catch (error) {
-    console.log("Не удалось подключиться к БД:", error);
+    console.error("Критическая ошибка при запуске сервера:", error);
+    process.exit(1);
   }
-});
+}
+
+startServer();
