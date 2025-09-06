@@ -2,7 +2,12 @@ const express = require("express");
 require("dotenv").config();
 const { Client } = require("pg");
 const { sequelize, Wallet, Transaction, Op } = require("./db");
-const { syncWallet, getErc20TokenBalance } = require("./service");
+const {
+  syncWallet,
+  getErc20TokenBalance,
+  getTrc20TokenBalance,
+  getSolTokenBalance,
+} = require("./service");
 
 const app = express();
 app.use(express.json());
@@ -51,17 +56,17 @@ app.post("/api/wallets", async (req, res) => {
   }
 });
 
-app.get("api/wallets", async (req, res) => {
+app.get("/api/wallets", async (req, res) => {
   const wallets = await Wallet.findAll({ order: [["id", "ASC"]] });
   res.json(wallets);
 });
 
-app.delete("api/wallets/:id", async (req, res) => {
+app.delete("/api/wallets/:id", async (req, res) => {
   await Wallet.destroy({ where: { id: req.params.id } });
   res.status(204).send();
 });
 
-app.get("api/balance/:walletId/:token", async (req, res) => {
+app.get("/api/balance/:walletId/:token", async (req, res) => {
   try {
     const { walletId, token } = req.params;
     const wallet = await Wallet.findByPk(walletId);
@@ -82,25 +87,42 @@ app.get("api/balance/:walletId/:token", async (req, res) => {
   }
 });
 
-app.post("api/report", async (req, res) => {
+function parseDate(dateString) {
+  const [day, month, year] = dateString.split(".");
+  return new Date(year, month - 1, day);
+}
+
+app.post("/api/report", async (req, res) => {
   const { walletId, startDate, endDate } = req.body;
   try {
+    // 1. Преобразуем строки в корректные объекты Date
+    const parsedStartDate = parseDate(startDate);
+    const parsedEndDate = parseDate(endDate);
+
+    // Добавляем к конечной дате 23:59:59, чтобы включить весь день
+    parsedEndDate.setHours(23, 59, 59, 999);
+
+    // 2. Выполняем синхронизацию
     await syncWallet(walletId);
+
+    // 3. Используем корректные даты в запросе к БД
     const result = await Transaction.findAndCountAll({
       where: {
         wallet_id: walletId,
         tx_timestamp: {
-          [Op.between]: [new Date(startDate), new Date(endDate)],
+          [Op.between]: [parsedStartDate, parsedEndDate],
         },
-        order: [["tx_timestamp", "DESC"]],
       },
+      order: [["tx_timestamp", "DESC"]],
     });
+
+    console.log("результат тут", result);
 
     const totalAmount = await Transaction.sum("amount", {
       where: {
         wallet_id: walletId,
         tx_timestamp: {
-          [Op.between]: [new Date(startDate), new Date(endDate)],
+          [Op.between]: [parsedStartDate, parsedEndDate],
         },
       },
     });

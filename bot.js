@@ -70,12 +70,12 @@ bot.onText(/\/balance (\d+) (\S+)/, async (msg, match) => {
     );
     bot.sendMessage(
       msg.chat.id,
-      `Баланс ${token.toUpperCase()} на кошельке ID ${walletId}: *${data.balance.toFixed(
-        4
-      )}* (вот это нихуя себе у тебя там денег)`,
+      `Баланс ${token.toUpperCase()} на кошельке ID ${walletId}: *${
+        data.balance
+      }* (вот это нихуя себе у тебя там денег)`,
       { parse_mode: "Markdown" }
     );
   } catch (e) {
-    bot.sendMessage(msg.chat.id, `Ошибка: ${e.response.data.message}`);
+    bot.sendMessage(msg.chat.id, `Ошибка: ${e.message}`);
   }
 });

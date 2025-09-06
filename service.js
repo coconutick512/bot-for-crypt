@@ -1,8 +1,9 @@
 const axios = require("axios");
 const { Transaction } = require("./db");
 const { token } = require("morgan");
-const { Connection, PublicKey } = require('@solana/web3.js');
-const { getAccount, getMint } = require('@solana/spl-token');
+const { Connection, PublicKey } = require("@solana/web3.js");
+const { getAssociatedTokenAddress } = require("@solana/spl-token");
+const TronWeb = require("tronweb");
 
 const TOKEN_CONTRACTS = {
   ERC20: {
@@ -71,91 +72,105 @@ async function fetchAndSaveErc20Transactions(wallet) {
   }
 }
 
-
 async function getTrc20TokenBalance(walletAddress, tokenSymbol) {
   const tokenContract = TOKEN_CONTRACTS.TRC20[tokenSymbol];
   if (!tokenContract) throw new Error("Токен не поддерживается");
 
-  // Используем TronGrid или Tronscan API
   const url = `https://apilist.tronscan.org/api/account?address=${walletAddress}`;
   const response = await axios.get(url);
-
-  const tokenData = response.data.trc20tokens.find(t => t.tokenId === tokenContract);
+  console.log(response.data);
+  const tokenData = response.data.trc20token_balances.find(
+    (t) => t.tokenId === tokenContract
+  );
   if (!tokenData) return 0;
-  return parseFloat(tokenData.balance) / (10 ** Number(tokenData.tokenDecimal));
+  return parseFloat(tokenData.balance) / 10 ** Number(tokenData.tokenDecimal);
 }
 
 async function fetchAndSaveTrc20Transactions(wallet) {
-  const apiUrl = `https://apilist.tronscan.org/api/transaction?sort=-timestamp&count=true&limit=50&start=0&address=${wallet.address}`;
-  const response = await axios.get(apiUrl);
+  const reverseTrc20Contracts = {};
+  for (const symbol in TOKEN_CONTRACTS.TRC20) {
+    const address = TOKEN_CONTRACTS.TRC20[symbol];
+    reverseTrc20Contracts[address] = symbol;
+  }
+  const apiUrl = `https://api.trongrid.io/v1/accounts/${wallet.address}/transactions/trc20`;
+  const response = await axios.get(apiUrl, {
+    params: {
+      order_by: "block_timestamp,desc",
+    },
+    headers: {
+      "TRON-PRO-API-KEY": process.env.TRONGRID_API_KEY,
+    },
+  });
+
+  if (!response.data || !response.data.data) {
+    console.log("Нет данных о транзакциях TRC20 для кошелька:", wallet.address);
+    return;
+  }
+
   const transactions = response.data.data;
 
   for (const tx of transactions) {
-    if (!tx.contractData || tx.to_address !== wallet.address) continue;
-    const isTrackedToken = Object.values(TOKEN_CONTRACTS.TRC20).includes(tx.contractData.contract_address);
-    if (!isTrackedToken) continue;
+    // Этот эндпоинт возвращает только TRC20, поэтому дополнительная фильтрация не нужна,
+    // но мы проверим, что это поступление на наш кошелек
+    if (tx.to.toLowerCase() !== wallet.address.toLowerCase()) continue;
 
-    const amount = parseFloat(tx.contractData.amount_str) / 1e6; // возможно другое число, проверьте tokenDecimal
+    // Ищем символ токена в нашем справочнике по адресу контракта
+    const tokenSymbol = reverseTrc20Contracts[tx.token_info.address];
+
+    // Если токен не из нашего списка (не USDT/USDC), пропускаем его
+    if (!tokenSymbol) continue;
+
+    // API TronGrid уже дает нам всю нужную информацию
+    const amountTokens = parseFloat(tx.value) / 10 ** tx.token_info.decimals;
 
     await Transaction.findOrCreate({
-      where: { tx_hash: tx.hash },
+      where: { tx_hash: tx.transaction_id },
       defaults: {
         wallet_id: wallet.id,
-        amount,
-        token_symbol: tx.contractData.token_symbol,
-        from_address: tx.ownerAddress,
-        tx_timestamp: new Date(tx.timestamp),
+        amount: amountTokens,
+        token_symbol: tokenSymbol,
+        from_address: tx.from,
+        tx_timestamp: new Date(tx.block_timestamp),
       },
     });
   }
 }
 
-
 // Константы токенов USDT/USDC см. выше
 async function getSolTokenBalance(walletAddress, tokenSymbol) {
-  const connection = new Connection('https://api.mainnet-beta.solana.com');
-  const tokenMint = TOKEN_CONTRACTS.SOL[tokenSymbol];
-  if (!tokenMint) throw new Error("Токен не поддерживается");
-
-  // Найти адрес ассоциированного токен-аккаунта (можно использовать @solana/spl-token)
-  const tokenAccounts = await connection.getTokenAccountsByOwner(
-    new PublicKey(walletAddress),
-    { mint: new PublicKey(tokenMint) }
+  const connection = new Connection(
+    "https://api.mainnet-beta.solana.com",
+    "confirmed"
   );
-  if (!tokenAccounts.value.length) return 0;
+  const tokenMintAddress = TOKEN_CONTRACTS.SOL[tokenSymbol];
 
-  const info = await getAccount(connection, tokenAccounts.value[0].pubkey);
-  const mintInfo = await getMint(connection, new PublicKey(tokenMint));
-  return Number(info.amount) / (10 ** mintInfo.decimals);
-}
+  if (!tokenMintAddress) {
+    throw new Error("Токен не поддерживается для Solana");
+  }
 
-async function fetchAndSaveSolTransactions(wallet, tokenSymbol) {
-  const tokenMint = TOKEN_CONTRACTS.SOL[tokenSymbol];
-  if (!tokenMint) throw new Error("Токен не поддерживается");
+  try {
+    const wallet = new PublicKey(walletAddress);
+    const tokenMint = new PublicKey(tokenMintAddress);
 
-  // Получаем все токеновые транзакции для адреса
-  const apiUrl = `https://public-api.solscan.io/account/splTransfers?account=${wallet.address}&limit=50`; // лимит можно увеличить до 1000
-  const response = await axios.get(apiUrl, { headers: { accept: 'application/json' } });
-  const transactions = response.data;
-  
-  for (const tx of transactions) {
-    // Проверим: приходящая транзакция и токен совпадает
+    // ТЕПЕРЬ ВЫЗОВ СНОВА С 'await'
+    const associatedTokenAccountAddress = await getAssociatedTokenAddress(
+      tokenMint,
+      wallet
+    );
+
+    const balance = await connection.getTokenAccountBalance(
+      associatedTokenAccountAddress
+    );
+
+    return parseFloat(balance.value.uiAmountString);
+  } catch (e) {
     if (
-      tx.dst === wallet.address &&
-      tx.tokenAddress === tokenMint
+      e.message.includes("could not find account") ||
+      e.message.includes("Invalid public key")
     ) {
-      const amount = Number(tx.amount) / (10 ** Number(tx.tokenDecimals));
-      await Transaction.findOrCreate({
-        where: { tx_hash: tx.txHash },
-        defaults: {
-          wallet_id: wallet.id,
-          amount,
-          token_symbol: tokenSymbol,
-          from_address: tx.src,
-          tx_timestamp: new Date(tx.blockTime * 1000),
-        },
-      });
+      return 0;
     }
+    throw e;
   }
 }
 
@@ -178,4 +193,9 @@ async function syncWallet(walletId) {
   console.log(`Синхронизация для кошелька ${wallet.label} завершена.`);
 }
 
-module.exports = { syncWallet, getErc20TokenBalance };
+module.exports = {
+  syncWallet,
+  getErc20TokenBalance,
+  getSolTokenBalance,
+  getTrc20TokenBalance,
+};
