@@ -21,6 +21,7 @@ bot.onText(/\/wallets/, async (msg) => {
   bot.sendMessage(msg.chat.id, message, { parse_mode: "Markdown" });
 });
 
+
 bot.onText(/\/add (\S+) (\S+) (.+)/, async (msg, match) => {
   try {
     await axios.post(`${API_BASE_URL}/wallets`, {
