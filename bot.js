@@ -8,7 +8,7 @@ const API_BASE_URL = "http://localhost:3000/api";
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "Привет, Алекс! Я бот для учета крипто-финансов. Для начала работы, введите CVV карты. Армяне вперед!!!! Доступные команды:\n/wallets - список кошельков\n/add <сеть> <адрес> <имя> - добавить кошелек\n/report <id> <с_даты> <до_даты> - отчет\n/balance <id> <токен> - баланс"
+    "Привет, Алекс! Я бот для учета крипто-финансов. Для начала работы, введите CVV карты. Армяне вперед!!!! Доступные команды:\n/wallets - список кошельков\n/add <сеть> <адрес> <имя> - добавить кошелек\n/delete <id> - удалить кошелек\n/report <id> <с_даты> <до_даты> - отчет\n/balance <id> <токен> - баланс"
   );
 });
 
@@ -21,7 +21,14 @@ bot.onText(/\/wallets/, async (msg) => {
   bot.sendMessage(msg.chat.id, message, { parse_mode: "Markdown" });
 });
 
-bot.onText(/\/add (\S+) (\S+) (.+)/, async (msg, match) => {
+bot.onText(/\/add/, async (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    "Напиши команду add, название сети кошелька, адрес и имя (пример: 'add TRC20 XXX767X88sauasiauixas76 TRC20 ДЛЯ РУССКИХ ФИНАНСОВ')"
+  );
+});
+
+bot.onText(/add (\S+) (\S+) (.+)/, async (msg, match) => {
   try {
     await axios.post(`${API_BASE_URL}/wallets`, {
       network: match[1].toUpperCase(),
@@ -34,7 +41,14 @@ bot.onText(/\/add (\S+) (\S+) (.+)/, async (msg, match) => {
   }
 });
 
-bot.onText(/\/report (\d+) (\S+) (\S+)/, async (msg, match) => {
+bot.onText(/\/report/, async (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    "Напиши команду report, ID кошелька, дату начала трекинга, дату конца трекинга (пример: 'report 5 01.05.2025 07.09.2025 ')"
+  );
+});
+
+bot.onText(/report (\d+) (\S+) (\S+)/, async (msg, match) => {
   const [_, walletId, startDate, endDate] = match;
   bot.sendMessage(msg.chat.id, "Готовлю отчет (зачем?...)...");
   try {
@@ -77,5 +91,15 @@ bot.onText(/\/balance (\d+) (\S+)/, async (msg, match) => {
     );
   } catch (e) {
     bot.sendMessage(msg.chat.id, `Ошибка: ${e.message}`);
+  }
+});
+
+bot.onText(/\/delete (\d+)/, async (msg, match) => {
+  const [_, walletId] = match;
+  try {
+    await axios.delete(`${API_BASE_URL}/wallets/${walletId}`);
+    bot.sendMessage(msg.chat.id, `Кошелек удален!`);
+  } catch (e) {
+    bot.sendMessage(msg.chat.id, `Ошибка: ${e.response.data.message}`);
   }
 });

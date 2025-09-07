@@ -264,7 +264,7 @@ async function fetchAndSaveSolTransactions(wallet) {
           amount: amount,
           token_symbol: tokenSymbol,
           from_address: transfer.fromUserAccount,
-          tx_timestamp: new Date(parseInt(tx.timeStamp) * 1000),
+          tx_timestamp: new Date(parseInt(tx.timestamp) * 1000),
         },
       });
     }
