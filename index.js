@@ -101,7 +101,6 @@ app.post("/api/report", async (req, res) => {
 
     // Добавляем к конечной дате 23:59:59, чтобы включить весь день
     parsedEndDate.setHours(23, 59, 59, 999);
-
     // 2. Выполняем синхронизацию
     await syncWallet(walletId);
 
@@ -152,6 +151,8 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`Сервер запущен и готов к работе на порту ${PORT}`);
     });
+
+    require("./bot");
   } catch (error) {
     console.error("Критическая ошибка при запуске сервера:", error);
     process.exit(1);
