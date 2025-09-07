@@ -15,7 +15,7 @@ const TOKEN_CONTRACTS = {
     USDC: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
   },
   SOL: {
-    USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB ",
     USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   },
 };
@@ -197,11 +197,84 @@ async function getSolTokenBalance(walletAddress, tokenSymbol) {
   }
 }
 
+// blockchainService.js
+
+// ... (импорты axios, Transaction, и т.д.)
+// ... (объект TOKEN_CONTRACTS)
+
+async function fetchAndSaveSolTransactions(wallet) {
+  // 1. Создаем обратный справочник, где все ключи (адреса) в НИЖНЕМ РЕГИСТРЕ.
+  const reverseSolContracts = {};
+  for (const symbol in TOKEN_CONTRACTS.SOL) {
+    const mintAddress = TOKEN_CONTRACTS.SOL[symbol];
+    // Приводим ключ к нижнему регистру
+    reverseSolContracts[mintAddress.trim().toLowerCase()] = symbol;
+  }
+
+  // 2. Формируем URL для Helius API
+  const heliusApiUrl = `https://api.helius.xyz/v0/addresses/${wallet.address}/transactions?api-key=${process.env.HELIUS_API_KEY}`;
+  const response = await axios.get(heliusApiUrl);
+
+  if (!response.data || response.data.length === 0) {
+    console.log(
+      `Нет данных о транзакциях для кошелька Solana: ${wallet.address}`
+    );
+    return;
+  }
+
+  const transactions = response.data;
+
+  // 3. Перебираем транзакции
+  for (const tx of transactions) {
+    if (tx.type !== "TRANSFER" || tx.meta?.err) {
+      continue;
+    }
+
+    for (const transfer of tx.tokenTransfers) {
+      // Проверяем, что это поступление на наш кошелек
+      if (
+        transfer.toUserAccount.toLowerCase() !== wallet.address.toLowerCase()
+      ) {
+        continue;
+      }
+
+      // Приводим адрес из API к нижнему регистру перед поиском
+      const mintAddressFromTx = transfer.mint.toLowerCase();
+
+      // Теперь поиск будет успешным, так как обе стороны в нижнем регистре
+      const tokenSymbol = reverseSolContracts[mintAddressFromTx];
+
+      console.log(
+        "Адрес контракта (минт):",
+        mintAddressFromTx,
+        "Найденный символ:",
+        tokenSymbol
+      );
+
+      if (!tokenSymbol) {
+        continue;
+      }
+
+      const amount = transfer.tokenAmount;
+
+      await Transaction.findOrCreate({
+        where: { tx_hash: tx.signature },
+        defaults: {
+          wallet_id: wallet.id,
+          amount: amount,
+          token_symbol: tokenSymbol,
+          from_address: transfer.fromUserAccount,
+          tx_timestamp: new Date(parseInt(tx.timeStamp) * 1000),
+        },
+      });
+    }
+  }
+}
+
 async function syncWallet(walletId) {
   const { Wallet } = require("./db");
   const wallet = await Wallet.findByPk(walletId);
   if (!wallet) throw new Error("Кошелек не найден");
-
   switch (wallet.network) {
     case "ERC20":
       await fetchAndSaveErc20Transactions(wallet);
