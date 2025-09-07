@@ -116,8 +116,6 @@ app.post("/api/report", async (req, res) => {
       order: [["tx_timestamp", "DESC"]],
     });
 
-    console.log("результат тут", result);
-
     const totalAmount = await Transaction.sum("amount", {
       where: {
         wallet_id: walletId,

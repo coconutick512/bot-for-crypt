@@ -47,14 +47,37 @@ async function getErc20TokenBalance(walletAddress, tokenSymbol) {
 async function fetchAndSaveErc20Transactions(wallet) {
   const apiUrl = `https://api.etherscan.io/api?module=account&action=tokentx&address=${wallet.address}&sort=desc&apikey=${process.env.ETHERSCAN_API_KEY}`;
   const response = await axios.get(apiUrl);
+
+  if (!Array.isArray(response.data.result)) {
+    console.error(
+      "Etherscan API не вернул массив транзакций:",
+      response.data.message
+    );
+    return;
+  }
+
   const transactions = response.data.result;
+
+  const trackedAddressesLowerCase = Object.values(TOKEN_CONTRACTS.ERC20).map(
+    (addr) => addr.toLowerCase()
+  );
 
   for (const tx of transactions) {
     if (tx.to.toLowerCase() !== wallet.address.toLowerCase()) continue;
 
-    const isTrackedToken = Object.values(TOKEN_CONTRACTS.ERC20).includes(
-      tx.contractAdress
+    const contractAddressFromTx = tx.contractAddress.toLowerCase();
+
+    const isTrackedToken = trackedAddressesLowerCase.includes(
+      contractAddressFromTx
     );
+
+    console.log(
+      "Адрес контракта из транзакции:",
+      contractAddressFromTx,
+      "Это отслеживаемый токен?",
+      isTrackedToken
+    );
+
     if (!isTrackedToken) continue;
 
     const amount = parseFloat(tx.value) / 10 ** parseInt(tx.tokenDecimal);
