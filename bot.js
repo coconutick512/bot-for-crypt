@@ -76,7 +76,14 @@ bot.onText(/report (\d+) (\S+) (\S+)/, async (msg, match) => {
   }
 });
 
-bot.onText(/\/balance (\d+) (\S+)/, async (msg, match) => {
+bot.onText(/\/balance/, async (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    "Напиши команду balance, ID кошелька и токен (пример: 'balance 5 usdt ')"
+  );
+});
+
+bot.onText(/balance (\d+) (\S+)/, async (msg, match) => {
   const [_, walletId, token] = match;
   try {
     const { data } = await axios.get(
